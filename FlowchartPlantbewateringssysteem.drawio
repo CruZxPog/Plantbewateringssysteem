@@ -207,7 +207,7 @@
         </mxCell>
         <mxCell id="nx4mN9wmy4ZOvfLZEnnc-116" value="JA" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontColor=light-dark(#82b366, #ededed);" vertex="1" connectable="0" parent="nx4mN9wmy4ZOvfLZEnnc-115">
           <mxGeometry x="-0.6874" y="4" relative="1" as="geometry">
-            <mxPoint as="offset" />
+            <mxPoint x="76" y="4" as="offset" />
           </mxGeometry>
         </mxCell>
         <mxCell id="nx4mN9wmy4ZOvfLZEnnc-114" value="DUURTIJD WATER GEVEN&lt;div&gt;= 1 sec&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;absoluteArcSize=1;arcSize=14;strokeWidth=2;" vertex="1" parent="WIyWlLk6GJQsqaUBKTNV-1">
@@ -232,7 +232,7 @@
         </mxCell>
         <mxCell id="nx4mN9wmy4ZOvfLZEnnc-96" value="JA" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontColor=light-dark(#82b366, #ededed);" vertex="1" connectable="0" parent="nx4mN9wmy4ZOvfLZEnnc-95">
           <mxGeometry x="-0.889" y="4" relative="1" as="geometry">
-            <mxPoint as="offset" />
+            <mxPoint x="94" as="offset" />
           </mxGeometry>
         </mxCell>
         <mxCell id="nx4mN9wmy4ZOvfLZEnnc-104" value="JA" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontColor=light-dark(#82b366, #ededed);" vertex="1" connectable="0" parent="nx4mN9wmy4ZOvfLZEnnc-95">
