@@ -301,7 +301,7 @@
             <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="5K2i2bFbJvTg2kXO0Kb1-32" value="IS&amp;nbsp;&lt;div&gt;WATERTIMER&lt;/div&gt;&lt;div&gt;DONE?&lt;/div&gt;" style="strokeWidth=2;html=1;shape=mxgraph.flowchart.decision;whiteSpace=wrap;" vertex="1" parent="WIyWlLk6GJQsqaUBKTNV-1">
+        <mxCell id="5K2i2bFbJvTg2kXO0Kb1-32" value="IS&amp;nbsp;&lt;div&gt;WATERTIMER&lt;/div&gt;&lt;div&gt;DONE AND PUMP ON?&lt;/div&gt;" style="strokeWidth=2;html=1;shape=mxgraph.flowchart.decision;whiteSpace=wrap;" vertex="1" parent="WIyWlLk6GJQsqaUBKTNV-1">
           <mxGeometry x="288" y="-330" width="100" height="100" as="geometry" />
         </mxCell>
         <mxCell id="5K2i2bFbJvTg2kXO0Kb1-37" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;" edge="1" parent="WIyWlLk6GJQsqaUBKTNV-1" source="5K2i2bFbJvTg2kXO0Kb1-34" target="nx4mN9wmy4ZOvfLZEnnc-67">
