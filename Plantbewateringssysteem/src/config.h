@@ -1,22 +1,26 @@
-// TODO: Wachttijd tussen 2 opeenvolgende inlezingen van sensoren
-const int READ_TIMER = 20000;
+// DONE: Wachttijd tussen 2 opeenvolgende inlezingen van sensoren
+const int READ_TIMER = 5000;
+
+// DONE: Temperatuur schakelwaarden
+const byte TEMP_LOW = 5;
+const byte TEMP_HIGH = 25;
+
+// DONE: Categoriën vochtigheid
+enum Categorie {
+  DROOG,
+  VOCHTIG,
+  NAT,
+  ONBEKEND  // Handig als foutwaarde
+};
 
 
-// TODO: Temperatuur schakelwaarden
-const int TEMP_LOW = 5;
-const int TEMP_HIGH = 25;
+// DONE: Statussen water geven (geen water, wél water)
+enum PompStatus {
+  OFF = LOW,
+  ON = HIGH
+};
 
-// TODO: Categoriën vochtigheid
-const String DROOG = "DROOG";
-const String VOCHTIG = "VOCHTIG";
-const String NAT = "NAT";
-
-// TODO: Statussen water geven (geen water, wél water)
-const byte PUMP_ON = HIGH;
-const byte PUMP_OFF = LOW;
-
-
-// TODO: Duurtijden water geven (in milliseconden)
+// DONE: Duurtijden water geven (in milliseconden)
 const int PUMP_TIMER_SHORT = 1000;
 const int PUMP_TIMER_LONG = 2000;
 
@@ -46,7 +50,7 @@ const int RESISTIEVE_SENSOR_NAT_INTERVAL_MAX = 2538;
 
 // Minimum- en maximumwaarde voor de capacitieve vochtigheidssensor om de interpretatie "DROOG" te krijgen
 const int CAPACITIEVE_SENSOR_DROOG_INTERVAL_MIN = 2514;
-const int CAPACITIEVE_SENSOR_DROOG_INTERVAL_MAX = 2849;
+const int CAPACITIEVE_SENSOR_DROOG_INTERVAL_MAX = 9999;
 
 // Minimum- en maximumwaarde voor de capacitieve vochtigheidssensor om de interpretatie "VOCHTIG" te krijgen
 const int CAPACITIEVE_SENSOR_VOCHTIG_INTERVAL_MIN = 1853;

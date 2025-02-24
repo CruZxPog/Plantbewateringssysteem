@@ -3,12 +3,15 @@
 #include "DallasTemperature.h"
 #include "config.h"
 
+#include "ArduinoTrace.h"
+#define ARDUINOTRACE_ENABLE 1
+
 // DONE: Definieer juiste pinnummers voor sensoren
 #define OVERRIDE_BUTTON_PIN D7
 #define BVHR_PIN A4
 #define BVHC_PIN A3
-#define TEMPSENS_PIN D3
-#define PUMP_PIN D5
+#define TEMPSENS_PIN D7
+#define PUMP_PIN D12
 
 OneWire oneWire(TEMPSENS_PIN);
 DallasTemperature sensors(&oneWire);
@@ -21,7 +24,7 @@ unsigned long startWateringTime = 0;
 int wateringDuration = 0;
 
 // DONE: Variabele om status van de waterpomp aan te geven, dit is nodig om te kunnen controlleren of de waterpomp gestopt moet worden
-bool pumpState = false;
+byte pumpState = OFF;
 
 /**
  * Bepaal de temperatuur, op basis van de gekozen temperatuursensor.
@@ -35,58 +38,96 @@ int leesTemperatuur() {
 }
 
 /**
- * Bepaal de categorie van de capacitieve bodemvochtigheidssensor voor de gemeten sensorwaarde.
+ * Bepaal de categorie van de capacitieve bodemCategoriessensor voor de gemeten sensorwaarde.
  * We gebruiken hierbij de configuratie uit onze calibratie.  Per categorie checken we of de waarde
  * tussen de MIN en de MAX valt.
  * Opgelet!!  Gebruik enkel de categoriën uit je configuratiebestand!
  */
-String berekenCategorieCapactieveBVH(int sensorwaarde) {
-   // DONE: Implementeer zodat de categorie voor de capacitieve BVH sensor wordt berekend.
+Categorie berekenCategorieCapactieveBVH(int sensorwaarde) {
+  // DUMP(sensorwaarde);
+  // DONE: Implementeer zodat de categorie voor de capacitieve BVH sensor wordt berekend.
   if (sensorwaarde >= CAPACITIEVE_SENSOR_DROOG_INTERVAL_MIN && sensorwaarde <= CAPACITIEVE_SENSOR_DROOG_INTERVAL_MAX) {
-      return "DROOG";
+      return DROOG;
   } else if (sensorwaarde >= CAPACITIEVE_SENSOR_VOCHTIG_INTERVAL_MIN && sensorwaarde <= CAPACITIEVE_SENSOR_VOCHTIG_INTERVAL_MAX) {
-      return "VOCHTIG";
+      return VOCHTIG;
   } else if (sensorwaarde >= CAPACITIEVE_SENSOR_NAT_INTERVAL_MIN && sensorwaarde <= CAPACITIEVE_SENSOR_NAT_INTERVAL_MAX) {
-      return "NAT";
+      return NAT;
   } else {
-      return "ONBEKEND";
+      return ONBEKEND;
   }
    
 }
 
 /**
- * Bepaal de categorie van de resistieve bodemvochtigheidssensor voor de gemeten sensorwaarde.
+ * Bepaal de categorie van de resistieve bodemCategoriessensor voor de gemeten sensorwaarde.
  * We gebruiken hierbij de configuratie uit onze calibratie.  Per categorie checken we of de waarde
  * tussen de MIN en de MAX valt.
  * Opgelet!!  Gebruik enkel de categoriën uit je configuratiebestand!
  */
-String berekenCategorieResistieveBVH(int sensorwaarde) {
+Categorie berekenCategorieResistieveBVH(int sensorwaarde) {
+  // DUMP(sensorwaarde);
   if (sensorwaarde >= RESISTIEVE_SENSOR_DROOG_INTERVAL_MIN && sensorwaarde <= RESISTIEVE_SENSOR_DROOG_INTERVAL_MAX) {
-      return "DROOG";
+      return DROOG;
   } else if (sensorwaarde >= RESISTIEVE_SENSOR_VOCHTIG_INTERVAL_MIN && sensorwaarde <= RESISTIEVE_SENSOR_VOCHTIG_INTERVAL_MAX) {
-      return "VOCHTIG";
+      return VOCHTIG;
   } else if (sensorwaarde >= RESISTIEVE_SENSOR_NAT_INTERVAL_MIN && sensorwaarde <= RESISTIEVE_SENSOR_NAT_INTERVAL_MAX) {
-      return "NAT";
+      return NAT;
   } else {
-      return "ONBEKEND";
+      return ONBEKEND;
   }
 }
 
 /**
- * Bereken de samengestelde categorie voor beide bodemvochtigheidssensoren.
+ * Bereken de samengestelde categorie voor beide bodemCategoriessensoren.
  * Mogelijke strategiën: droogste wint altijd / één wint altijd / geen mogelijke categorie bij verschil
  * Opgelet!!  Gebruik enkel de categoriën uit je configuratiebestand!
  */
-String berekenSamengesteldeCategorie(String categorieResistieveBVH, String categorieCapacitieveBVH) {
-  if (categorieResistieveBVH == "DROOG" || categorieCapacitieveBVH == "DROOG") {
-    return "DROOG";
-  } else if (categorieResistieveBVH == "VOCHTIG" || categorieCapacitieveBVH == "VOCHTIG") {
-      return "VOCHTIG";
-  } else if (categorieResistieveBVH == "NAT" || categorieCapacitieveBVH == "NAT") {
-      return "NAT";
+Categorie berekenSamengesteldeCategorie(Categorie  categorieResistieveBVH, Categorie  categorieCapacitieveBVH, int temperatuur) {
+  if(temperatuur > TEMP_HIGH){
+    if (categorieResistieveBVH == DROOG && categorieCapacitieveBVH == DROOG) {
+      return DROOG;
+    } else if (categorieResistieveBVH == DROOG && categorieCapacitieveBVH == VOCHTIG) {
+      return DROOG;
+    } else if (categorieResistieveBVH == VOCHTIG && categorieCapacitieveBVH == DROOG) {
+      return DROOG;
+    } else if (categorieResistieveBVH == DROOG && categorieCapacitieveBVH == NAT) {
+      return VOCHTIG;
+    } else if (categorieResistieveBVH == NAT && categorieCapacitieveBVH == DROOG) {
+      return VOCHTIG;
+    } else if (categorieResistieveBVH == VOCHTIG && categorieCapacitieveBVH == VOCHTIG) {
+      return VOCHTIG;
+    } else if (categorieResistieveBVH == VOCHTIG && categorieCapacitieveBVH == NAT) {
+      return VOCHTIG;
+    } else if (categorieResistieveBVH == NAT && categorieCapacitieveBVH == VOCHTIG) {
+      return VOCHTIG;
+    } else if (categorieResistieveBVH == NAT && categorieCapacitieveBVH == NAT) {
+      return NAT;
+    } else {
+      return ONBEKEND;
+    }
   } else {
-      return "ONBEKEND";
-}
+    if (categorieResistieveBVH == DROOG && categorieCapacitieveBVH == DROOG) {
+      return DROOG;
+    } else if (categorieResistieveBVH == DROOG && categorieCapacitieveBVH == VOCHTIG) {
+      return DROOG;
+    } else if (categorieResistieveBVH == VOCHTIG && categorieCapacitieveBVH == DROOG) {
+      return DROOG;
+    } else if (categorieResistieveBVH == DROOG && categorieCapacitieveBVH == NAT) {
+      return VOCHTIG;
+    } else if (categorieResistieveBVH == NAT && categorieCapacitieveBVH == DROOG) {
+      return VOCHTIG;
+    } else if (categorieResistieveBVH == VOCHTIG && categorieCapacitieveBVH == VOCHTIG) {
+      return VOCHTIG;
+    } else if (categorieResistieveBVH == VOCHTIG && categorieCapacitieveBVH == NAT) {
+      return VOCHTIG;
+    } else if (categorieResistieveBVH == NAT && categorieCapacitieveBVH == VOCHTIG) {
+      return VOCHTIG;
+    } else if (categorieResistieveBVH == NAT && categorieCapacitieveBVH == NAT) {
+      return NAT;
+    } else {
+      return ONBEKEND;
+    }
+  }
 }
 
 /**
@@ -96,13 +137,14 @@ String berekenSamengesteldeCategorie(String categorieResistieveBVH, String categ
  *            Gebruik een status om aan te geven dat de waterpomp aan het water geven is.
  */
 void zetWaterpompAan(int duurtijd) {
+  TRACE();
   // DONE: Implementeer code om de pomp aan te zetten
-  pumpState = true;
-  digitalWrite(PUMP_PIN, PUMP_ON);
+  pumpState = ON;
+  digitalWrite(PUMP_PIN, ON);
   // DONE: Initialiseer de variabelen om de starttijd en duurtijd van het water geven te regelen
   startWateringTime = millis();
   wateringDuration = duurtijd;
- 
+  DUMP(startWateringTime);
 }
 
 /**
@@ -111,9 +153,10 @@ void zetWaterpompAan(int duurtijd) {
  *           opnieuw geïnitialiseerd moeten worden bij het uitzetten van de pomp.
  */
 void zetWaterpompUit() {
+  TRACE();
   // DONE: Implementeer code om de pomp uit te zetten
-  pumpState = false;
-  digitalWrite(PUMP_PIN, PUMP_OFF);
+  pumpState = OFF;
+  digitalWrite(PUMP_PIN, OFF);
   // DONE: Initialiseer de variabelen om de starrtijd en duurtijd van het water geven te regelen
   startWateringTime = 0;
   wateringDuration = 0;
@@ -125,16 +168,21 @@ void zetWaterpompUit() {
  * Het uitzetten van de waterpomp gebeurt niet hier maar in de loop() functie na controle of er voldoende tijd verstreken is.
  */
 void leesSensorenEnGeefWaterIndienNodig() {
+  TRACE();
   // DONE: Implementeer inlezen met correcte pinnen
   int capacitieve_bvh_waarde = analogRead(BVHC_PIN);
+  DUMP(capacitieve_bvh_waarde);
   int resistieve_bvh_waarde = analogRead(BVHR_PIN);
+  DUMP(resistieve_bvh_waarde);
   int temperatuur = leesTemperatuur();
-
+  DUMP(temperatuur);
   // Bepaal individuele categoriën en samengestelde categorie
-  String categorieCapacitieveBVH = berekenCategorieCapactieveBVH(capacitieve_bvh_waarde);
-  String categorieResistieveBVH = berekenCategorieResistieveBVH(resistieve_bvh_waarde);
-  String categorie = berekenSamengesteldeCategorie(categorieCapacitieveBVH, categorieResistieveBVH);
-
+  Categorie categorieCapacitieveBVH = berekenCategorieCapactieveBVH(capacitieve_bvh_waarde);
+  DUMP(categorieCapacitieveBVH);
+  Categorie categorieResistieveBVH = berekenCategorieResistieveBVH(resistieve_bvh_waarde);
+  DUMP(categorieResistieveBVH);
+  Categorie categorie = berekenSamengesteldeCategorie(categorieCapacitieveBVH, categorieResistieveBVH, temperatuur);
+  DUMP(categorie);
   // DONE: Beslis over water geven en pas de controles toe uit de flowchart.  
   // !! Gebruik enkel de constanten uit de configuratie om met een categorie te vergelijken!
   // !! Gebruik enkel de constanten uit de configuratie om de duurtijd van het water geven mee te geven
@@ -148,13 +196,13 @@ void leesSensorenEnGeefWaterIndienNodig() {
 
 void setup() {
   // DONE: Implementeer de nodig code voor lezen sensoren (indien nodig)
-  Serial.begin(9600);
+  Serial.begin(460800);
   sensors.begin();
   pinMode(OVERRIDE_BUTTON_PIN, INPUT);
   pinMode(BVHR_PIN,INPUT);
   pinMode(BVHC_PIN,INPUT);
   pinMode(PUMP_PIN,OUTPUT);
-  digitalWrite(PUMP_PIN,PUMP_OFF);
+  digitalWrite(PUMP_PIN,OFF);
 }
 
 void loop() {
@@ -162,7 +210,7 @@ void loop() {
   unsigned long huidigeMillis = millis();
   
   // DONE: Controleer of de waterpomp uitgezet moet worden en roep functie zetWaterpompUit() aan indien nodig
-  if (pumpState && (huidigeMillis - startWateringTime >= wateringDuration)) {
+  if (pumpState == ON && (huidigeMillis - startWateringTime >= wateringDuration)) {
       zetWaterpompUit();
   }
   
@@ -171,4 +219,5 @@ void loop() {
       leesSensorenEnGeefWaterIndienNodig();
       lastReadTime = huidigeMillis;
   }
+  //Serial.println("-----------");
 }
