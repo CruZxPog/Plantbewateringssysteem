@@ -1,22 +1,22 @@
-// TODO: Wachttijd tussen 2 opeenvolgende inlezingen van sensoren
+// DONE: Wachttijd tussen 2 opeenvolgende inlezingen van sensoren
 const int READ_TIMER = 20000;
 
 
-// TODO: Temperatuur schakelwaarden
+// DONE: Temperatuur schakelwaarden
 const int TEMP_LOW = 5;
 const int TEMP_HIGH = 25;
 
-// TODO: Categoriën vochtigheid
+// DONE: Categoriën vochtigheid
 const String DROOG = "DROOG";
 const String VOCHTIG = "VOCHTIG";
 const String NAT = "NAT";
 
-// TODO: Statussen water geven (geen water, wél water)
+// DONE: Statussen water geven (geen water, wél water)
 const byte PUMP_ON = HIGH;
 const byte PUMP_OFF = LOW;
 
 
-// TODO: Duurtijden water geven (in milliseconden)
+// DONE: Duurtijden water geven (in milliseconden)
 const int PUMP_TIMER_SHORT = 1000;
 const int PUMP_TIMER_LONG = 2000;
 
