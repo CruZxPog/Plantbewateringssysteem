@@ -6,8 +6,10 @@
 #include "ArduinoTrace.h"
 #define ARDUINOTRACE_ENABLE 1
 
+RTC_DATA_ATTR int bootCount = 0;
+
 // DONE: Definieer juiste pinnummers voor sensoren
-#define OVERRIDE_BUTTON_PIN D4
+#define OVERRIDE_BUTTON_PIN 25
 #define BVHR_PIN A4
 #define BVHC_PIN A3
 #define TEMPSENS_PIN D7
@@ -25,6 +27,29 @@ int wateringDuration = 0;
 
 // DONE: Variabele om status van de waterpomp aan te geven, dit is nodig om te kunnen controlleren of de waterpomp gestopt moet worden
 byte pumpState = OFF;
+
+
+/*
+Method to print the reason by which ESP32
+has been awaken from sleep
+code from: https://randomnerdtutorials.com/esp32-deep-sleep-arduino-ide-wake-up-sources/
+*/
+esp_sleep_wakeup_cause_t wakeup_reason;
+
+void print_wakeup_reason(){
+
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch(wakeup_reason)
+  {
+    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
+    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
+  }
+}
 
 /**
  * Bepaal de temperatuur, op basis van de gekozen temperatuursensor.
@@ -206,32 +231,55 @@ void leesSensorenEnGeefWaterIndienNodig() {
 
 void setup() {
   // DONE: Implementeer de nodig code voor lezen sensoren (indien nodig)
-  Serial.begin(460800);
+  Serial.begin(115200);
   sensors.begin();
-  pinMode(OVERRIDE_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(OVERRIDE_BUTTON_PIN, INPUT_PULLDOWN);
   pinMode(BVHR_PIN,INPUT);
   pinMode(BVHC_PIN,INPUT);
   pinMode(PUMP_PIN,OUTPUT);
   digitalWrite(PUMP_PIN,OFF);
+
+  // DONE: Implementeer wake-up sources
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_25, 1);
+  esp_sleep_enable_timer_wakeup(WAKEUP_TIMER);
+
+  //Print the wakeup reason for ESP32
+  print_wakeup_reason();
 }
+bool runOnce = false;
 
 void loop() {
+  if (bootCount == 0) {
+    bootCount++;
+    esp_deep_sleep_start();
+  }
+
   // We hebben huidige millis nodig om de verschillende processen te controleren (water geven / stoppen)
   unsigned long huidigeMillis = millis();
   
   // DONE: Controleer of de waterpomp uitgezet moet worden en roep functie zetWaterpompUit() aan indien nodig
   if (pumpState == ON && (huidigeMillis - startWateringTime >= wateringDuration)) {
-    zetWaterpompUit();
+    zetWaterpompUit();    
   }
   // DONE: Controleer of de waterpomp aangezet moet worden en roep functie zetWaterpompAan() aan indien nodig
-  if (pumpState != ON && digitalRead(OVERRIDE_BUTTON_PIN) == LOW) {
+  if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0 && runOnce == false) {
+    runOnce = true;
     Serial.println("Panic button pressed");
     zetWaterpompAan(PUMP_TIMER_PANIC);
     Serial.println("Water geven met paniek duur");
   }
   // DONE: Controleer of sensoren ingelezen moeten worden en roep functie leesSensorenEnGeefWaterIndienNodig() aan indien nodig
-  if (huidigeMillis - lastReadTime >= READ_TIMER) {
+  if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER && runOnce == false) {
+    runOnce = true;
     leesSensorenEnGeefWaterIndienNodig();
     lastReadTime = huidigeMillis;
   }
+  
+  if(pumpState == OFF){
+    //put esp to sleep
+    Serial.println("Going to sleep now for " + String(WAKEUP_SECONDS) + " seconds");
+    esp_deep_sleep_start();
+  }
 }
+
+
