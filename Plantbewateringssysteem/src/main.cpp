@@ -7,7 +7,7 @@
 #define ARDUINOTRACE_ENABLE 1
 
 // DONE: Definieer juiste pinnummers voor sensoren
-#define OVERRIDE_BUTTON_PIN D7
+#define OVERRIDE_BUTTON_PIN D4
 #define BVHR_PIN A4
 #define BVHC_PIN A3
 #define TEMPSENS_PIN D7
@@ -55,7 +55,6 @@ Categorie berekenCategorieCapactieveBVH(int sensorwaarde) {
   } else {
       return ONBEKEND;
   }
-   
 }
 
 /**
@@ -135,7 +134,7 @@ Categorie berekenSamengesteldeCategorie(Categorie  categorieResistieveBVH, Categ
  * Opgelet!!  Deze functie mag GEEN DELAY bevatten.  De duurtijd zal dus via een variabele moeten bijgehouden worden.
  *            Het hoofdprogramma moet telkens controlleren of de duurtijd reeds verstreken is, via millis().
  *            Gebruik een status om aan te geven dat de waterpomp aan het water geven is.
- */
+*/
 void zetWaterpompAan(int duurtijd) {
   TRACE();
   // DONE: Implementeer code om de pomp aan te zetten
@@ -168,7 +167,6 @@ void zetWaterpompUit() {
  * Het uitzetten van de waterpomp gebeurt niet hier maar in de loop() functie na controle of er voldoende tijd verstreken is.
  */
 void leesSensorenEnGeefWaterIndienNodig() {
-  TRACE();
   // DONE: Implementeer inlezen met correcte pinnen
   int capacitieve_bvh_waarde = analogRead(BVHC_PIN);
   DUMP(capacitieve_bvh_waarde);
@@ -183,14 +181,26 @@ void leesSensorenEnGeefWaterIndienNodig() {
   DUMP(categorieResistieveBVH);
   Categorie categorie = berekenSamengesteldeCategorie(categorieCapacitieveBVH, categorieResistieveBVH, temperatuur);
   DUMP(categorie);
+  if(categorie==DROOG){
+    Serial.println("categorie = DROOG");
+  } else if(categorie==VOCHTIG){
+    Serial.println("categorie = VOCHTIG");
+  } else if(categorie==NAT){
+    Serial.println("categorie = NAT");
+  } else {
+    Serial.println("categorie = ONBEKEND");
+  }
+
   // DONE: Beslis over water geven en pas de controles toe uit de flowchart.  
   // !! Gebruik enkel de constanten uit de configuratie om met een categorie te vergelijken!
   // !! Gebruik enkel de constanten uit de configuratie om de duurtijd van het water geven mee te geven
   // !! Gebruik verder enkel de functies zetWaterpompAan() en zetWaterpompUit() om de waterpomp aan/uit te zetten
   if (temperatuur > TEMP_HIGH && categorie == DROOG){
     zetWaterpompAan(PUMP_TIMER_LONG);
+    Serial.println("Water geven met lange duur");
   } else if (temperatuur >= TEMP_LOW && temperatuur <= TEMP_HIGH && categorie == DROOG){
     zetWaterpompAan(PUMP_TIMER_SHORT);
+    Serial.println("Water geven met korte duur");
   }
 }
 
@@ -198,7 +208,7 @@ void setup() {
   // DONE: Implementeer de nodig code voor lezen sensoren (indien nodig)
   Serial.begin(460800);
   sensors.begin();
-  pinMode(OVERRIDE_BUTTON_PIN, INPUT);
+  pinMode(OVERRIDE_BUTTON_PIN, INPUT_PULLUP);
   pinMode(BVHR_PIN,INPUT);
   pinMode(BVHC_PIN,INPUT);
   pinMode(PUMP_PIN,OUTPUT);
@@ -211,13 +221,17 @@ void loop() {
   
   // DONE: Controleer of de waterpomp uitgezet moet worden en roep functie zetWaterpompUit() aan indien nodig
   if (pumpState == ON && (huidigeMillis - startWateringTime >= wateringDuration)) {
-      zetWaterpompUit();
+    zetWaterpompUit();
   }
-  
+  // DONE: Controleer of de waterpomp aangezet moet worden en roep functie zetWaterpompAan() aan indien nodig
+  if (pumpState != ON && digitalRead(OVERRIDE_BUTTON_PIN) == LOW) {
+    Serial.println("Panic button pressed");
+    zetWaterpompAan(PUMP_TIMER_PANIC);
+    Serial.println("Water geven met paniek duur");
+  }
   // DONE: Controleer of sensoren ingelezen moeten worden en roep functie leesSensorenEnGeefWaterIndienNodig() aan indien nodig
   if (huidigeMillis - lastReadTime >= READ_TIMER) {
-      leesSensorenEnGeefWaterIndienNodig();
-      lastReadTime = huidigeMillis;
+    leesSensorenEnGeefWaterIndienNodig();
+    lastReadTime = huidigeMillis;
   }
-  //Serial.println("-----------");
 }
