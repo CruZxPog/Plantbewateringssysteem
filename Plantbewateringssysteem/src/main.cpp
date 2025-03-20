@@ -246,6 +246,8 @@ void setup() {
   //Print the wakeup reason for ESP32
   print_wakeup_reason();
 }
+
+// this is used because otherwise the code will go in an infitnite loop
 bool runOnce = false;
 
 void loop() {
