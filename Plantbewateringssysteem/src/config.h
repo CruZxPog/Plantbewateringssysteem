@@ -1,5 +1,7 @@
 // DONE: Wachttijd tussen 2 opeenvolgende inlezingen van sensoren
-const int READ_TIMER = 5000;
+const int uS_TO_S_FACTOR = 1000000;
+const int WAKEUP_SECONDS = 50;
+const int WAKEUP_TIMER = WAKEUP_SECONDS * uS_TO_S_FACTOR;
 
 // DONE: Temperatuur schakelwaarden
 const byte TEMP_LOW = 5;
@@ -23,7 +25,7 @@ enum PompStatus {
 // DONE: Duurtijden water geven (in milliseconden)
 const int PUMP_TIMER_SHORT = 1000;
 const int PUMP_TIMER_LONG = 2000;
-
+const int PUMP_TIMER_PANIC = 3000;
 /*
   Opgelet, we definiëren de intervallen als gesloten: [min, max]
 */
