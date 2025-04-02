@@ -4,6 +4,15 @@
 #include "config.h"
 
 #include "ArduinoTrace.h"
+
+#include "security.h"
+
+// Include libraries
+#include "WiFi.h"
+#include "HTTPClient.h"
+#include "time.h"
+const String GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/";
+
 #define ARDUINOTRACE_ENABLE 1
 
 RTC_DATA_ATTR int bootCount = 0;
@@ -35,6 +44,56 @@ has been awaken from sleep
 code from: https://randomnerdtutorials.com/esp32-deep-sleep-arduino-ide-wake-up-sources/
 */
 esp_sleep_wakeup_cause_t wakeup_reason;
+
+void initWifi() {
+  Serial.print("Connecting to WiFi: ");
+  Serial.println(WIFI_SSID);
+  Serial.flush();
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+}
+
+void setTime() {
+  Serial.println("Synchronizing time with NTP...");
+  configTime(3600, 3600, NTP_SERVER);  // UTC+1 wintertijd, +2 zomertijd (wordt automatisch geregeld)
+  
+  // Wacht op een geldige tijd
+  struct tm timeinfo;
+  int retry = 0;
+  while (!getLocalTime(&timeinfo) && retry < 10) {  
+    Serial.println("Failed to obtain time, retrying...");
+    delay(1000);
+    retry++;
+  }
+  
+  if (retry >= 10) {
+    Serial.println("Could not get time from NTP! Using default time.");
+  } else {
+    Serial.println("Time synchronized successfully.");
+  }
+}
+
+String getCurrentDateAndTime() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo))   {
+    Serial.println("Failed to obtain time");
+    return "";
+  }
+
+  char timeStringBuff[50]; // 50 chars should be enough
+  //strftime(timeStringBuff, sizeof(timeStringBuff), "%A, %B %d %Y %H:%M:%S", &timeinfo);
+  strftime(timeStringBuff, sizeof(timeStringBuff), "%Y-%m-%dT%H:%M:%S", &timeinfo);
+
+
+  String asString(timeStringBuff);
+  asString.replace(" ", "-");
+
+  return asString;
+}
 
 void print_wakeup_reason(){
 
@@ -232,6 +291,10 @@ void leesSensorenEnGeefWaterIndienNodig() {
 void setup() {
   // DONE: Implementeer de nodig code voor lezen sensoren (indien nodig)
   Serial.begin(115200);
+  
+  initWifi();
+  setTime();
+
   sensors.begin();
   pinMode(OVERRIDE_BUTTON_PIN, INPUT_PULLDOWN);
   pinMode(BVHR_PIN,INPUT);
@@ -276,7 +339,32 @@ void loop() {
     leesSensorenEnGeefWaterIndienNodig();
     lastReadTime = huidigeMillis;
   }
-  
+  String urlFinal = GOOGLE_APPS_SCRIPT_URL + GOOGLE_SCRIPT_DEPLOYMENT_ID + "/exec?" + 
+        "date=" + currentDateAndTime + 
+        "&temp=" + temp +
+        "&bvh_cap=" + bvh_cap +
+        "&bvh_res=" + bvh_res +
+        "&bvh_samen=" + bvh_samen +
+        "&sec=" + pomp_sec +
+        "&long=" + longitude +
+        "&lat=" + latitude;
+        HTTPClient http;
+    
+    http.begin(urlFinal.c_str());
+    // http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    int httpCode = http.GET();
+    Serial.print("HTTP Status Code: ");
+    Serial.println(httpCode);
+
+    // Get response from HTTP request
+    String payload;
+    if (httpCode > 0) {
+      payload = http.getString();
+      Serial.println("Payload: " + payload);
+    }
+    
+    http.end();
+
   if(pumpState == OFF){
     //put esp to sleep
     Serial.println("Going to sleep now for " + String(WAKEUP_SECONDS) + " seconds");
