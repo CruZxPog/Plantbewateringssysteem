@@ -1,16 +1,28 @@
+#include "config.h"
+#include "security.h"
+
 #include "Arduino.h"
+
 #include "OneWire.h"
 #include "DallasTemperature.h"
-#include "config.h"
 
 #include "ArduinoTrace.h"
 
-#include "security.h"
-
-// Include libraries
 #include "WiFi.h"
 #include "HTTPClient.h"
 #include "time.h"
+
+#include "HardwareSerial.h"
+#include "TinyGPS++.h"
+
+HardwareSerial gpsSerial(1);
+TinyGPSPlus gps;
+
+// NTP = Network Time Protocol
+const char *NTP_SERVER = "pool.ntp.org";
+const long GMT_OFFSET_SEC = 0; // 19800;
+const int DAYLIGHT_OFFSET_SEC = 0;
+
 const String GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/";
 
 #define ARDUINOTRACE_ENABLE 1
@@ -19,10 +31,13 @@ RTC_DATA_ATTR int bootCount = 0;
 
 // DONE: Definieer juiste pinnummers voor sensoren
 #define OVERRIDE_BUTTON_PIN 25
-#define BVHR_PIN A4
-#define BVHC_PIN A3
+#define BVHR_PIN A3
+#define BVHC_PIN A1
 #define TEMPSENS_PIN D7
 #define PUMP_PIN D12
+#define RX_PIN 16
+#define TX_PIN 17
+#define SENSOR_POWER  D6  // GPIO pin controlling 2N3906
 
 OneWire oneWire(TEMPSENS_PIN);
 DallasTemperature sensors(&oneWire);
@@ -37,64 +52,13 @@ int wateringDuration = 0;
 // DONE: Variabele om status van de waterpomp aan te geven, dit is nodig om te kunnen controlleren of de waterpomp gestopt moet worden
 byte pumpState = OFF;
 
-
+//functions for deep sleep
 /*
 Method to print the reason by which ESP32
 has been awaken from sleep
 code from: https://randomnerdtutorials.com/esp32-deep-sleep-arduino-ide-wake-up-sources/
 */
 esp_sleep_wakeup_cause_t wakeup_reason;
-
-void initWifi() {
-  Serial.print("Connecting to WiFi: ");
-  Serial.println(WIFI_SSID);
-  Serial.flush();
-
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-}
-
-void setTime() {
-  Serial.println("Synchronizing time with NTP...");
-  configTime(3600, 3600, NTP_SERVER);  // UTC+1 wintertijd, +2 zomertijd (wordt automatisch geregeld)
-  
-  // Wacht op een geldige tijd
-  struct tm timeinfo;
-  int retry = 0;
-  while (!getLocalTime(&timeinfo) && retry < 10) {  
-    Serial.println("Failed to obtain time, retrying...");
-    delay(1000);
-    retry++;
-  }
-  
-  if (retry >= 10) {
-    Serial.println("Could not get time from NTP! Using default time.");
-  } else {
-    Serial.println("Time synchronized successfully.");
-  }
-}
-
-String getCurrentDateAndTime() {
-  struct tm timeinfo;
-  if (!getLocalTime(&timeinfo))   {
-    Serial.println("Failed to obtain time");
-    return "";
-  }
-
-  char timeStringBuff[50]; // 50 chars should be enough
-  //strftime(timeStringBuff, sizeof(timeStringBuff), "%A, %B %d %Y %H:%M:%S", &timeinfo);
-  strftime(timeStringBuff, sizeof(timeStringBuff), "%Y-%m-%dT%H:%M:%S", &timeinfo);
-
-
-  String asString(timeStringBuff);
-  asString.replace(" ", "-");
-
-  return asString;
-}
-
 void print_wakeup_reason(){
 
   wakeup_reason = esp_sleep_get_wakeup_cause();
@@ -109,7 +73,9 @@ void print_wakeup_reason(){
     default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
   }
 }
+//functions for deep sleep
 
+//functions for sensor reading
 /**
  * Bepaal de temperatuur, op basis van de gekozen temperatuursensor.
  * Voor een digitale sensor zal dit anders zijn dan voor een analoge.
@@ -120,7 +86,6 @@ int leesTemperatuur() {
   sensors.requestTemperatures();
   return sensors.getTempCByIndex(0);
 }
-
 /**
  * Bepaal de categorie van de capacitieve bodemCategoriessensor voor de gemeten sensorwaarde.
  * We gebruiken hierbij de configuratie uit onze calibratie.  Per categorie checken we of de waarde
@@ -140,7 +105,6 @@ Categorie berekenCategorieCapactieveBVH(int sensorwaarde) {
       return ONBEKEND;
   }
 }
-
 /**
  * Bepaal de categorie van de resistieve bodemCategoriessensor voor de gemeten sensorwaarde.
  * We gebruiken hierbij de configuratie uit onze calibratie.  Per categorie checken we of de waarde
@@ -159,7 +123,6 @@ Categorie berekenCategorieResistieveBVH(int sensorwaarde) {
       return ONBEKEND;
   }
 }
-
 /**
  * Bereken de samengestelde categorie voor beide bodemCategoriessensoren.
  * Mogelijke strategiën: droogste wint altijd / één wint altijd / geen mogelijke categorie bij verschil
@@ -212,7 +175,6 @@ Categorie berekenSamengesteldeCategorie(Categorie  categorieResistieveBVH, Categ
     }
   }
 }
-
 /**
  * Zet de waterpomp aan voor een bepaalde tijd.   
  * Opgelet!!  Deze functie mag GEEN DELAY bevatten.  De duurtijd zal dus via een variabele moeten bijgehouden worden.
@@ -229,7 +191,6 @@ void zetWaterpompAan(int duurtijd) {
   wateringDuration = duurtijd;
   DUMP(startWateringTime);
 }
-
 /**
  * Zet de waterpomp uit. 
  * Opgelet!! Aangezien de zetWaterpompAan() functie geen delay bevat, zullen de variabelen die daar gebruikt worden
@@ -245,7 +206,6 @@ void zetWaterpompUit() {
   wateringDuration = 0;
 
 }
-
 /**
  * Deze functie bevat alle code voor het uitlezen van de sensoren en om de waterpomp indien nodig aan te zetten.
  * Het uitzetten van de waterpomp gebeurt niet hier maar in de loop() functie na controle of er voldoende tijd verstreken is.
@@ -287,41 +247,191 @@ void leesSensorenEnGeefWaterIndienNodig() {
     Serial.println("Water geven met korte duur");
   }
 }
+//functions for sensor reading
+
+//functions for http payload
+void initWifiAndGps() {
+  Serial.print("Connecting to WiFi: ");
+  Serial.println(WIFI_SSID);
+  Serial.flush();
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("Connected to WiFi!");
+  Serial.print("Search for GPS signal...");
+  // bool gpsState = false;
+  // while(gpsState == false){
+  //   while (gpsSerial.available() > 0) {
+  //     if (gps.encode(gpsSerial.read())) {
+  //       if (gps.location.isValid()) {
+  //         Serial.print(gps.location.lat(), 6);
+  //         Serial.print(F(","));
+  //         Serial.print(gps.location.lng(), 6);
+  //         gpsState = true;
+  //         Serial.println("GPS signal found!");
+  //       } else {
+  //         Serial.println(F("INVALID"));
+  //       }
+  //     }
+  //   }
+  }
+//}
+
+void setTime() {
+  Serial.println("Synchronizing time with NTP...");
+  configTime(3600, 3600, NTP_SERVER);  // UTC+1 wintertijd, +2 zomertijd (wordt automatisch geregeld)
+  
+  // Wacht op een geldige tijd
+  struct tm timeinfo;
+  int retry = 0;
+  while (!getLocalTime(&timeinfo) && retry < 10) {  
+    Serial.println("Failed to obtain time, retrying...");
+    delay(1000);
+    retry++;
+  }
+  
+  if (retry >= 10) {
+    Serial.println("Could not get time from NTP! Using default time.");
+  } else {
+    Serial.println("Time synchronized successfully.");
+  }
+}
+String getCurrentDateAndTime() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo))   {
+    Serial.println("Failed to obtain time");
+    return "";
+  }
+
+  char timeStringBuff[50]; // 50 chars should be enough
+  //strftime(timeStringBuff, sizeof(timeStringBuff), "%A, %B %d %Y %H:%M:%S", &timeinfo);
+  strftime(timeStringBuff, sizeof(timeStringBuff), "%Y-%m-%dT%H:%M:%S", &timeinfo);
+
+
+  String asString(timeStringBuff);
+  asString.replace(" ", "-");
+
+  return asString;
+}
+struct SensorData {
+  String date;
+  int temp;
+  Categorie bvh_cap;
+  Categorie bvh_res;
+  Categorie bvh_samen;
+  int pomp_sec;
+  float latitude;
+  float longitude;
+};
+SensorData compileSensorData(){
+  SensorData data;
+  data.date = getCurrentDateAndTime();
+  data.temp = leesTemperatuur();
+  data.bvh_cap = berekenCategorieCapactieveBVH(analogRead(BVHC_PIN));
+  data.bvh_res = berekenCategorieResistieveBVH(analogRead(BVHR_PIN));
+  data.bvh_samen = berekenSamengesteldeCategorie(data.bvh_res, data.bvh_cap, data.temp);
+  data.pomp_sec = wateringDuration / 1000; // Convert milliseconds to seconds
+  data.latitude = gps.location.lat();
+  data.longitude = gps.location.lng();
+  return data;
+}
+String httpPayload() {
+  SensorData sData = compileSensorData();
+  String urlFinal = GOOGLE_APPS_SCRIPT_URL + GOOGLE_SCRIPT_DEPLOYMENT_ID + "/exec?" + 
+    "date=" + sData.date  + 
+    "&temp=" + sData.temp +
+    "&bvh_cap=" + sData.bvh_cap +
+    "&bvh_res=" + sData.bvh_res +
+    "&bvh_samen=" + sData.bvh_samen +
+    "&sec=" + sData.pomp_sec +
+    "&long=" + sData.longitude +
+    "&lat=" + sData.latitude;
+
+  return urlFinal;
+}
+
+void gotoSleep(){
+  Serial.println("Going to sleep now for " + String(WAKEUP_SECONDS) + " seconds");
+  Serial.println("turning off the sensors");
+  digitalWrite(SENSOR_POWER, HIGH); // Zet de VCC van sensors uit
+  esp_deep_sleep_start();
+}
 
 void setup() {
   // DONE: Implementeer de nodig code voor lezen sensoren (indien nodig)
   Serial.begin(115200);
-  
-  initWifi();
-  setTime();
+  pinMode(SENSOR_POWER, OUTPUT);
+  digitalWrite(SENSOR_POWER, LOW); // Zet de VCC van sensors aan
+  Serial.println("turning on the sensors");
 
-  sensors.begin();
+  gpsSerial.begin(9600, SERIAL_8N1, RX_PIN, TX_PIN);
+  
+  
+  initWifiAndGps();
+  setTime();
+  
   pinMode(OVERRIDE_BUTTON_PIN, INPUT_PULLDOWN);
   pinMode(BVHR_PIN,INPUT);
   pinMode(BVHC_PIN,INPUT);
   pinMode(PUMP_PIN,OUTPUT);
   digitalWrite(PUMP_PIN,OFF);
+  sensors.begin();
 
   // DONE: Implementeer wake-up sources
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_25, 1);
   esp_sleep_enable_timer_wakeup(WAKEUP_TIMER);
 
   //Print the wakeup reason for ESP32
-  print_wakeup_reason();
+  if (bootCount == 0) {
+    bootCount++;
+    Serial.print("First boot - ");
+    gotoSleep();
+  } else {
+    print_wakeup_reason();
+  }
 }
+//functions for http payload
 
 // this is used because otherwise the code will go in an infitnite loop
 bool runOnce = false;
 
 void loop() {
-  if (bootCount == 0) {
-    bootCount++;
-    esp_deep_sleep_start();
-  }
+  Serial.println("waiting");
+ delay(2000);
+ Serial.println("blabhlbhlkkjb");
+  //this only runs once after a reset
+  //we do this to prevent the code from running on first start up
+  
 
   // We hebben huidige millis nodig om de verschillende processen te controleren (water geven / stoppen)
   unsigned long huidigeMillis = millis();
-  
+  //we place the code for the http payload before all the checks beause we only want to send the data once after the sensors are read
+  if (WiFi.status() == WL_CONNECTED && runOnce == false) {
+    // Create URL with parameters to call Google Apps Script
+    String urlFinal = httpPayload();
+    
+    Serial.print("POST data to spreadsheet: ");
+    Serial.println(urlFinal);
+
+    // Send HTTP request and get status code
+    HTTPClient http;
+    http.begin(urlFinal.c_str());
+    // http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    int httpCode = http.GET();
+    Serial.print("HTTP Status Code: ");
+    Serial.println(httpCode);
+
+    // Get response from HTTP request
+    String payload;
+    if (httpCode > 0) {
+      payload = http.getString();
+      Serial.println("Payload: " + payload);
+    }
+    http.end();
+  }
   // DONE: Controleer of de waterpomp uitgezet moet worden en roep functie zetWaterpompUit() aan indien nodig
   if (pumpState == ON && (huidigeMillis - startWateringTime >= wateringDuration)) {
     zetWaterpompUit();    
@@ -339,35 +449,9 @@ void loop() {
     leesSensorenEnGeefWaterIndienNodig();
     lastReadTime = huidigeMillis;
   }
-  String urlFinal = GOOGLE_APPS_SCRIPT_URL + GOOGLE_SCRIPT_DEPLOYMENT_ID + "/exec?" + 
-        "date=" + currentDateAndTime + 
-        "&temp=" + temp +
-        "&bvh_cap=" + bvh_cap +
-        "&bvh_res=" + bvh_res +
-        "&bvh_samen=" + bvh_samen +
-        "&sec=" + pomp_sec +
-        "&long=" + longitude +
-        "&lat=" + latitude;
-        HTTPClient http;
-    
-    http.begin(urlFinal.c_str());
-    // http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    int httpCode = http.GET();
-    Serial.print("HTTP Status Code: ");
-    Serial.println(httpCode);
-
-    // Get response from HTTP request
-    String payload;
-    if (httpCode > 0) {
-      payload = http.getString();
-      Serial.println("Payload: " + payload);
-    }
-    
-    http.end();
 
   if(pumpState == OFF){
     //put esp to sleep
-    Serial.println("Going to sleep now for " + String(WAKEUP_SECONDS) + " seconds");
-    esp_deep_sleep_start();
+    gotoSleep();
   }
 }
