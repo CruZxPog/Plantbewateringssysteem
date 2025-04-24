@@ -1,3 +1,18 @@
+//		     █████████                  █████                    
+//			 ███░░░░░███                ░░███                    
+//			░███    ░███  ████████    ███████  ████████   ██████ 
+//			░███████████ ░░███░░███  ███░░███ ░░███░░███ ███░░███
+//			░███░░░░░███  ░███ ░███ ░███ ░███  ░███ ░░░ ░███████ 
+//			░███    ░███  ░███ ░███ ░███ ░███  ░███     ░███░░░  
+//			█████   █████ ████ █████░░████████ █████    ░░██████ 
+//			░░░░░   ░░░░░ ░░░░ ░░░░░  ░░░░░░░░ ░░░░░      ░░░░░░ 
+
+// Vergeet de bronnen niet toe te voegen!
+// Bronnen:
+// chatgpt.com (23/04)
+// copilot.github.com (23/04)
+
+
 #include "config.h"
 #include "security.h"
 
@@ -262,23 +277,24 @@ void initWifiAndGps() {
   }
   Serial.println("Connected to WiFi!");
   Serial.print("Search for GPS signal...");
-  // bool gpsState = false;
-  // while(gpsState == false){
-  //   while (gpsSerial.available() > 0) {
-  //     if (gps.encode(gpsSerial.read())) {
-  //       if (gps.location.isValid()) {
-  //         Serial.print(gps.location.lat(), 6);
-  //         Serial.print(F(","));
-  //         Serial.print(gps.location.lng(), 6);
-  //         gpsState = true;
-  //         Serial.println("GPS signal found!");
-  //       } else {
-  //         Serial.println(F("INVALID"));
-  //       }
-  //     }
-  //   }
+  bool gpsState = false;
+  while(gpsState == false){
+    while (gpsSerial.available() > 0) {
+      if (gps.encode(gpsSerial.read())) {
+        if (gps.location.isValid()) {
+          Serial.print(gps.location.lat(), 6);
+          Serial.print(F(","));
+          Serial.print(gps.location.lng(), 6);
+          gpsState = true;
+          Serial.println("GPS signal found!");
+        } else {
+          Serial.println(F("INVALID"));
+        }
+        delay(500);
+      }
+    }
   }
-//}
+}
 
 void setTime() {
   Serial.println("Synchronizing time with NTP...");
@@ -316,6 +332,7 @@ String getCurrentDateAndTime() {
 
   return asString;
 }
+
 struct SensorData {
   String date;
   int temp;
@@ -397,41 +414,13 @@ void setup() {
 
 // this is used because otherwise the code will go in an infitnite loop
 bool runOnce = false;
+bool payloadSent = false;
 
 void loop() {
-  Serial.println("waiting");
- delay(2000);
- Serial.println("blabhlbhlkkjb");
-  //this only runs once after a reset
-  //we do this to prevent the code from running on first start up
-  
-
   // We hebben huidige millis nodig om de verschillende processen te controleren (water geven / stoppen)
   unsigned long huidigeMillis = millis();
   //we place the code for the http payload before all the checks beause we only want to send the data once after the sensors are read
-  if (WiFi.status() == WL_CONNECTED && runOnce == false) {
-    // Create URL with parameters to call Google Apps Script
-    String urlFinal = httpPayload();
-    
-    Serial.print("POST data to spreadsheet: ");
-    Serial.println(urlFinal);
-
-    // Send HTTP request and get status code
-    HTTPClient http;
-    http.begin(urlFinal.c_str());
-    // http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    int httpCode = http.GET();
-    Serial.print("HTTP Status Code: ");
-    Serial.println(httpCode);
-
-    // Get response from HTTP request
-    String payload;
-    if (httpCode > 0) {
-      payload = http.getString();
-      Serial.println("Payload: " + payload);
-    }
-    http.end();
-  }
+  
   // DONE: Controleer of de waterpomp uitgezet moet worden en roep functie zetWaterpompUit() aan indien nodig
   if (pumpState == ON && (huidigeMillis - startWateringTime >= wateringDuration)) {
     zetWaterpompUit();    
@@ -449,8 +438,37 @@ void loop() {
     leesSensorenEnGeefWaterIndienNodig();
     lastReadTime = huidigeMillis;
   }
+  
+  if (WiFi.status() == WL_CONNECTED && payloadSent == false && pumpState == OFF) {
+    // Create URL with parameters to call Google Apps Script
+    String urlFinal = httpPayload();
+    
+    Serial.print("POST data to spreadsheet: ");
+    Serial.println(urlFinal);
 
-  if(pumpState == OFF){
+    // Send HTTP request and get status code
+    HTTPClient http;
+    http.begin(urlFinal.c_str());
+    // http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    int httpCode = http.GET();
+    Serial.print("HTTP Status Code: ");
+    Serial.println(httpCode);
+
+    // Get response from HTTP request
+    String payload;
+    if(httpCode == 200){
+      Serial.println("Data sent successfully!");
+      payload = http.getString();
+      Serial.println("Payload: " + payload);
+      payloadSent = true;
+    } else {
+      Serial.println("Failed to send data.");
+      payload = http.getString();
+      Serial.println("Payload: " + payload);
+    }
+    http.end();
+  }
+  if(pumpState == OFF && payloadSent == true){
     //put esp to sleep
     gotoSleep();
   }
