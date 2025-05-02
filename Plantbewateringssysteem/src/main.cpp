@@ -1,28 +1,11 @@
-//		     █████████                  █████                    
-//			 ███░░░░░███                ░░███                    
-//			░███    ░███  ████████    ███████  ████████   ██████ 
-//			░███████████ ░░███░░███  ███░░███ ░░███░░███ ███░░███
-//			░███░░░░░███  ░███ ░███ ░███ ░███  ░███ ░░░ ░███████ 
-//			░███    ░███  ░███ ░███ ░███ ░███  ░███     ░███░░░  
-//			█████   █████ ████ █████░░████████ █████    ░░██████ 
-//			░░░░░   ░░░░░ ░░░░ ░░░░░  ░░░░░░░░ ░░░░░      ░░░░░░ 
-
-// Vergeet de bronnen niet toe te voegen!
-// Bronnen:
-// chatgpt.com (23/04)
-// copilot.github.com (23/04)
-
-
 #include "config.h"
 #include "security.h"
 
 #include "Arduino.h"
+#include "ArduinoTrace.h"
 
 #include "OneWire.h"
 #include "DallasTemperature.h"
-
-#include "ArduinoTrace.h"
-
 #include "WiFi.h"
 #include "HTTPClient.h"
 #include "time.h"
@@ -33,18 +16,19 @@
 HardwareSerial gpsSerial(1);
 TinyGPSPlus gps;
 
-// NTP = Network Time Protocol
+// NTP (Network Time Protocol) configuration
 const char *NTP_SERVER = "pool.ntp.org";
-const long GMT_OFFSET_SEC = 0; // 19800;
+const long GMT_OFFSET_SEC = 0;
 const int DAYLIGHT_OFFSET_SEC = 0;
 
 const String GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/";
 
+// Enable ArduinoTrace debugging
 #define ARDUINOTRACE_ENABLE 1
 
 RTC_DATA_ATTR int bootCount = 0;
 
-// DONE: Definieer juiste pinnummers voor sensoren
+// Pin definitions for sensors and actuators
 #define OVERRIDE_BUTTON_PIN 25
 #define BVHR_PIN A3
 #define BVHC_PIN A1
@@ -52,99 +36,87 @@ RTC_DATA_ATTR int bootCount = 0;
 #define PUMP_PIN D12
 #define RX_PIN 16
 #define TX_PIN 17
-#define SENSOR_POWER  D6  // GPIO pin controlling 2N3906
+#define SENSOR_POWER D6  // GPIO pin controlling 2N3906 transistor for sensor power
 
 OneWire oneWire(TEMPSENS_PIN);
 DallasTemperature sensors(&oneWire);
 
-// DONE: Variabelen om wachttijd tussen inlezen sensoren te kunnen regelen
+// Timing and state variables
 unsigned long lastReadTime = 0;
-
-// DONE: Variabelen om duurtijd van water geven te kunnen regelen
 unsigned long startWateringTime = 0;
 int wateringDuration = 0;
+byte pumpState = OFF;  // Pump state (ON/OFF)
 
-// DONE: Variabele om status van de waterpomp aan te geven, dit is nodig om te kunnen controlleren of de waterpomp gestopt moet worden
-byte pumpState = OFF;
-
-//functions for deep sleep
-/*
-Method to print the reason by which ESP32
-has been awaken from sleep
-code from: https://randomnerdtutorials.com/esp32-deep-sleep-arduino-ide-wake-up-sources/
-*/
+// Deep sleep wake-up reason
 esp_sleep_wakeup_cause_t wakeup_reason;
-void print_wakeup_reason(){
-
+void print_wakeup_reason() {
   wakeup_reason = esp_sleep_get_wakeup_cause();
-
-  switch(wakeup_reason)
-  {
-    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
-    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
-    case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
-    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
-    case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
-    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
+  switch (wakeup_reason) {
+    case ESP_SLEEP_WAKEUP_EXT0:
+      Serial.println("Wakeup caused by external signal using RTC_IO");
+      break;
+    case ESP_SLEEP_WAKEUP_EXT1:
+      Serial.println("Wakeup caused by external signal using RTC_CNTL");
+      break;
+    case ESP_SLEEP_WAKEUP_TIMER:
+      Serial.println("Wakeup caused by timer");
+      break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD:
+      Serial.println("Wakeup caused by touchpad");
+      break;
+    case ESP_SLEEP_WAKEUP_ULP:
+      Serial.println("Wakeup caused by ULP program");
+      break;
+    default:
+      Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason);
+      break;
   }
 }
-//functions for deep sleep
 
-//functions for sensor reading
-/**
- * Bepaal de temperatuur, op basis van de gekozen temperatuursensor.
- * Voor een digitale sensor zal dit anders zijn dan voor een analoge.
- * Geeft de temperatuur in °C terug.
- */
+// Sensor reading functions
 int leesTemperatuur() {
-  // DONE: Implementeer zodat de temperatuur op de juiste manier wordt ingelezen
+  // Request temperature from the sensor and return it in °C
   sensors.requestTemperatures();
   return sensors.getTempCByIndex(0);
 }
-/**
- * Bepaal de categorie van de capacitieve bodemCategoriessensor voor de gemeten sensorwaarde.
- * We gebruiken hierbij de configuratie uit onze calibratie.  Per categorie checken we of de waarde
- * tussen de MIN en de MAX valt.
- * Opgelet!!  Gebruik enkel de categoriën uit je configuratiebestand!
- */
+
+Categorie capBVH = ONBEKEND;
 Categorie berekenCategorieCapactieveBVH(int sensorwaarde) {
-  // DUMP(sensorwaarde);
-  // DONE: Implementeer zodat de categorie voor de capacitieve BVH sensor wordt berekend.
+  // Determine category for capacitieve sensor reading
   if (sensorwaarde >= CAPACITIEVE_SENSOR_DROOG_INTERVAL_MIN && sensorwaarde <= CAPACITIEVE_SENSOR_DROOG_INTERVAL_MAX) {
-      return DROOG;
+    capBVH = DROOG;
+    return DROOG;
   } else if (sensorwaarde >= CAPACITIEVE_SENSOR_VOCHTIG_INTERVAL_MIN && sensorwaarde <= CAPACITIEVE_SENSOR_VOCHTIG_INTERVAL_MAX) {
-      return VOCHTIG;
+    capBVH = VOCHTIG;
+    return VOCHTIG;
   } else if (sensorwaarde >= CAPACITIEVE_SENSOR_NAT_INTERVAL_MIN && sensorwaarde <= CAPACITIEVE_SENSOR_NAT_INTERVAL_MAX) {
-      return NAT;
+    capBVH = NAT;
+    return NAT;
   } else {
-      return ONBEKEND;
+    return ONBEKEND;
   }
 }
-/**
- * Bepaal de categorie van de resistieve bodemCategoriessensor voor de gemeten sensorwaarde.
- * We gebruiken hierbij de configuratie uit onze calibratie.  Per categorie checken we of de waarde
- * tussen de MIN en de MAX valt.
- * Opgelet!!  Gebruik enkel de categoriën uit je configuratiebestand!
- */
+
+Categorie resBVH = ONBEKEND;
 Categorie berekenCategorieResistieveBVH(int sensorwaarde) {
-  // DUMP(sensorwaarde);
+  // Determine category for resistieve sensor reading
   if (sensorwaarde >= RESISTIEVE_SENSOR_DROOG_INTERVAL_MIN && sensorwaarde <= RESISTIEVE_SENSOR_DROOG_INTERVAL_MAX) {
-      return DROOG;
+    resBVH = DROOG;
+    return DROOG;
   } else if (sensorwaarde >= RESISTIEVE_SENSOR_VOCHTIG_INTERVAL_MIN && sensorwaarde <= RESISTIEVE_SENSOR_VOCHTIG_INTERVAL_MAX) {
-      return VOCHTIG;
+    resBVH = VOCHTIG;
+    return VOCHTIG;
   } else if (sensorwaarde >= RESISTIEVE_SENSOR_NAT_INTERVAL_MIN && sensorwaarde <= RESISTIEVE_SENSOR_NAT_INTERVAL_MAX) {
-      return NAT;
+    resBVH = NAT;
+    return NAT;
   } else {
-      return ONBEKEND;
+    return ONBEKEND;
   }
 }
-/**
- * Bereken de samengestelde categorie voor beide bodemCategoriessensoren.
- * Mogelijke strategiën: droogste wint altijd / één wint altijd / geen mogelijke categorie bij verschil
- * Opgelet!!  Gebruik enkel de categoriën uit je configuratiebestand!
- */
-Categorie berekenSamengesteldeCategorie(Categorie  categorieResistieveBVH, Categorie  categorieCapacitieveBVH, int temperatuur) {
-  if(temperatuur > TEMP_HIGH){
+
+Categorie berekenSamengesteldeCategorie(Categorie categorieResistieveBVH, Categorie categorieCapacitieveBVH, int temperatuur) {
+  // Determine combined category based on both sensors and temperature
+  if (temperatuur > TEMP_HIGH) {
     if (categorieResistieveBVH == DROOG && categorieCapacitieveBVH == DROOG) {
       return DROOG;
     } else if (categorieResistieveBVH == DROOG && categorieCapacitieveBVH == VOCHTIG) {
@@ -190,82 +162,74 @@ Categorie berekenSamengesteldeCategorie(Categorie  categorieResistieveBVH, Categ
     }
   }
 }
-/**
- * Zet de waterpomp aan voor een bepaalde tijd.   
- * Opgelet!!  Deze functie mag GEEN DELAY bevatten.  De duurtijd zal dus via een variabele moeten bijgehouden worden.
- *            Het hoofdprogramma moet telkens controlleren of de duurtijd reeds verstreken is, via millis().
- *            Gebruik een status om aan te geven dat de waterpomp aan het water geven is.
-*/
+
+// Pump control functions
 void zetWaterpompAan(int duurtijd) {
-  TRACE();
-  // DONE: Implementeer code om de pomp aan te zetten
+  TRACE();  // entering pump ON function
   pumpState = ON;
   digitalWrite(PUMP_PIN, ON);
-  // DONE: Initialiseer de variabelen om de starttijd en duurtijd van het water geven te regelen
+  // Initialize timing for watering
   startWateringTime = millis();
   wateringDuration = duurtijd;
-  DUMP(startWateringTime);
+  DUMP(wateringDuration);    // log how long the pump will run (ms)
+  DUMP(startWateringTime);   // log when the pump started (timestamp)
 }
-/**
- * Zet de waterpomp uit. 
- * Opgelet!! Aangezien de zetWaterpompAan() functie geen delay bevat, zullen de variabelen die daar gebruikt worden
- *           opnieuw geïnitialiseerd moeten worden bij het uitzetten van de pomp.
- */
+
 void zetWaterpompUit() {
-  TRACE();
-  // DONE: Implementeer code om de pomp uit te zetten
+  TRACE();  // entering pump OFF function
   pumpState = OFF;
   digitalWrite(PUMP_PIN, OFF);
-  // DONE: Initialiseer de variabelen om de starrtijd en duurtijd van het water geven te regelen
+  // Reset watering timing variables
   startWateringTime = 0;
   wateringDuration = 0;
-
+  DUMP(pumpState);  // log pump state to confirm it's OFF
 }
-/**
- * Deze functie bevat alle code voor het uitlezen van de sensoren en om de waterpomp indien nodig aan te zetten.
- * Het uitzetten van de waterpomp gebeurt niet hier maar in de loop() functie na controle of er voldoende tijd verstreken is.
- */
+
+// Read sensors and water if needed
 void leesSensorenEnGeefWaterIndienNodig() {
-  // DONE: Implementeer inlezen met correcte pinnen
+  TRACE();  // entering sensor reading routine
+  // Power up sensors and read values
   int capacitieve_bvh_waarde = analogRead(BVHC_PIN);
-  DUMP(capacitieve_bvh_waarde);
+  DUMP(capacitieve_bvh_waarde);   // log capacitieve sensor raw value
   int resistieve_bvh_waarde = analogRead(BVHR_PIN);
-  DUMP(resistieve_bvh_waarde);
+  DUMP(resistieve_bvh_waarde);    // log resistieve sensor raw value
   int temperatuur = leesTemperatuur();
-  DUMP(temperatuur);
-  // Bepaal individuele categoriën en samengestelde categorie
+  DUMP(temperatuur);              // log temperature reading
+
+  // Determine categories from sensor values
   Categorie categorieCapacitieveBVH = berekenCategorieCapactieveBVH(capacitieve_bvh_waarde);
-  DUMP(categorieCapacitieveBVH);
+  DUMP(categorieCapacitieveBVH);  // log category from capacitieve sensor
   Categorie categorieResistieveBVH = berekenCategorieResistieveBVH(resistieve_bvh_waarde);
-  DUMP(categorieResistieveBVH);
-  Categorie categorie = berekenSamengesteldeCategorie(categorieCapacitieveBVH, categorieResistieveBVH, temperatuur);
-  DUMP(categorie);
-  if(categorie==DROOG){
+  DUMP(categorieResistieveBVH);   // log category from resistieve sensor
+  Categorie categorie = berekenSamengesteldeCategorie(categorieResistieveBVH, categorieCapacitieveBVH, temperatuur);
+  DUMP(categorie);                // log combined category
+
+  // Print human-readable category result
+  if (categorie == DROOG) {
     Serial.println("categorie = DROOG");
-  } else if(categorie==VOCHTIG){
+  } else if (categorie == VOCHTIG) {
     Serial.println("categorie = VOCHTIG");
-  } else if(categorie==NAT){
+  } else if (categorie == NAT) {
     Serial.println("categorie = NAT");
   } else {
     Serial.println("categorie = ONBEKEND");
   }
 
-  // DONE: Beslis over water geven en pas de controles toe uit de flowchart.  
-  // !! Gebruik enkel de constanten uit de configuratie om met een categorie te vergelijken!
-  // !! Gebruik enkel de constanten uit de configuratie om de duurtijd van het water geven mee te geven
-  // !! Gebruik verder enkel de functies zetWaterpompAan() en zetWaterpompUit() om de waterpomp aan/uit te zetten
-  if (temperatuur > TEMP_HIGH && categorie == DROOG){
+  // Decide on watering based on category and temperature thresholds
+  if (temperatuur > TEMP_HIGH && categorie == DROOG) {
+    TRACE();  // dry soil and high temp branch
     zetWaterpompAan(PUMP_TIMER_LONG);
     Serial.println("Water geven met lange duur");
-  } else if (temperatuur >= TEMP_LOW && temperatuur <= TEMP_HIGH && categorie == DROOG){
+  } else if (temperatuur >= TEMP_LOW && temperatuur <= TEMP_HIGH && categorie == DROOG) {
+    TRACE();  // dry soil and moderate temp branch
     zetWaterpompAan(PUMP_TIMER_SHORT);
     Serial.println("Water geven met korte duur");
   }
 }
-//functions for sensor reading
 
-//functions for http payload
+// WiFi and GPS initialization
 void initWifiAndGps() {
+  TRACE();  // entering WiFi/GPS init
   Serial.print("Connecting to WiFi: ");
   Serial.println(WIFI_SSID);
   Serial.flush();
@@ -276,61 +240,62 @@ void initWifiAndGps() {
     Serial.print(".");
   }
   Serial.println("Connected to WiFi!");
+
   Serial.print("Search for GPS signal...");
   bool gpsState = false;
-  while(gpsState == false){
-    while (gpsSerial.available() > 0) {
-      if (gps.encode(gpsSerial.read())) {
-        if (gps.location.isValid()) {
-          Serial.print(gps.location.lat(), 6);
-          Serial.print(F(","));
-          Serial.print(gps.location.lng(), 6);
-          gpsState = true;
-          Serial.println("GPS signal found!");
-        } else {
-          Serial.println(F("INVALID"));
-        }
-        delay(500);
+  int trys = 0;
+  while (!gpsState && trys <= 5) {
+    if (gps.encode(gpsSerial.read())) {
+      if (gps.location.isValid()) {
+        Serial.print(gps.location.lat(), 6);
+        Serial.print(',');
+        Serial.print(gps.location.lng(), 6);
+        gpsState = true;
+        Serial.println("GPS signal found!");
+      } else {
+        Serial.println("INVALID");
       }
+      delay(500);
+    }
+    trys++;
+    if (trys == 5) {
+      Serial.println("GPS signal not found!");
+      break;
     }
   }
 }
 
 void setTime() {
+  TRACE();  // entering NTP time sync
   Serial.println("Synchronizing time with NTP...");
-  configTime(3600, 3600, NTP_SERVER);  // UTC+1 wintertijd, +2 zomertijd (wordt automatisch geregeld)
-  
-  // Wacht op een geldige tijd
+  configTime(3600, 3600, NTP_SERVER);  // Set timezone offset (UTC+1 standard, +2 DST)
+
+  // Wait for a valid time
   struct tm timeinfo;
   int retry = 0;
-  while (!getLocalTime(&timeinfo) && retry < 10) {  
+  while (!getLocalTime(&timeinfo) && retry < 10) {
     Serial.println("Failed to obtain time, retrying...");
     delay(1000);
     retry++;
   }
-  
+
   if (retry >= 10) {
     Serial.println("Could not get time from NTP! Using default time.");
   } else {
     Serial.println("Time synchronized successfully.");
   }
 }
+
+// Helper to get current date/time as string
 String getCurrentDateAndTime() {
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo))   {
+  if (!getLocalTime(&timeinfo)) {
     Serial.println("Failed to obtain time");
     return "";
   }
-
-  char timeStringBuff[50]; // 50 chars should be enough
-  //strftime(timeStringBuff, sizeof(timeStringBuff), "%A, %B %d %Y %H:%M:%S", &timeinfo);
+  char timeStringBuff[50];
   strftime(timeStringBuff, sizeof(timeStringBuff), "%Y-%m-%dT%H:%M:%S", &timeinfo);
-
-
-  String asString(timeStringBuff);
-  asString.replace(" ", "-");
-
-  return asString;
+  return String(timeStringBuff);
 }
 
 struct SensorData {
@@ -343,65 +308,71 @@ struct SensorData {
   float latitude;
   float longitude;
 };
-SensorData compileSensorData(){
+
+SensorData compileSensorData() {
   SensorData data;
   data.date = getCurrentDateAndTime();
   data.temp = leesTemperatuur();
-  data.bvh_cap = berekenCategorieCapactieveBVH(analogRead(BVHC_PIN));
-  data.bvh_res = berekenCategorieResistieveBVH(analogRead(BVHR_PIN));
+  data.bvh_cap = capBVH;
+  data.bvh_res = resBVH;
   data.bvh_samen = berekenSamengesteldeCategorie(data.bvh_res, data.bvh_cap, data.temp);
-  data.pomp_sec = wateringDuration / 1000; // Convert milliseconds to seconds
+  if (wateringDuration == 0) {
+    data.pomp_sec = wateringDuration; // Avoid division by zero
+  } else {
+    data.pomp_sec = wateringDuration / 1000;  // milliseconds to seconds
+  }
   data.latitude = gps.location.lat();
   data.longitude = gps.location.lng();
   return data;
 }
+
 String httpPayload() {
   SensorData sData = compileSensorData();
-  String urlFinal = GOOGLE_APPS_SCRIPT_URL + GOOGLE_SCRIPT_DEPLOYMENT_ID + "/exec?" + 
-    "date=" + sData.date  + 
-    "&temp=" + sData.temp +
-    "&bvh_cap=" + sData.bvh_cap +
-    "&bvh_res=" + sData.bvh_res +
-    "&bvh_samen=" + sData.bvh_samen +
-    "&sec=" + sData.pomp_sec +
-    "&long=" + sData.longitude +
-    "&lat=" + sData.latitude;
-
+  // Construct the URL query with sensor data
+  String urlFinal = GOOGLE_APPS_SCRIPT_URL + GOOGLE_SCRIPT_DEPLOYMENT_ID + "/exec?" +
+                    "date=" + sData.date +
+                    "&temp=" + sData.temp +
+                    "&bvh_cap=" + sData.bvh_cap +
+                    "&bvh_res=" + sData.bvh_res +
+                    "&bvh_samen=" + sData.bvh_samen +
+                    "&sec=" + sData.pomp_sec +
+                    "&long=" + sData.longitude +
+                    "&lat=" + sData.latitude;
   return urlFinal;
 }
 
-void gotoSleep(){
+void gotoSleep() {
+  TRACE();  // entering deep sleep routine
   Serial.println("Going to sleep now for " + String(WAKEUP_SECONDS) + " seconds");
   Serial.println("turning off the sensors");
-  digitalWrite(SENSOR_POWER, HIGH); // Zet de VCC van sensors uit
+  digitalWrite(SENSOR_POWER, HIGH);  // cut power to sensors
   esp_deep_sleep_start();
 }
 
 void setup() {
-  // DONE: Implementeer de nodig code voor lezen sensoren (indien nodig)
   Serial.begin(115200);
+  TRACE();  // mark setup start
   pinMode(SENSOR_POWER, OUTPUT);
-  digitalWrite(SENSOR_POWER, LOW); // Zet de VCC van sensors aan
+  digitalWrite(SENSOR_POWER, LOW);  // turn on sensors power
   Serial.println("turning on the sensors");
 
   gpsSerial.begin(9600, SERIAL_8N1, RX_PIN, TX_PIN);
-  
-  
   initWifiAndGps();
   setTime();
-  
+
+  // Initialize I/O pins
   pinMode(OVERRIDE_BUTTON_PIN, INPUT_PULLDOWN);
-  pinMode(BVHR_PIN,INPUT);
-  pinMode(BVHC_PIN,INPUT);
-  pinMode(PUMP_PIN,OUTPUT);
-  digitalWrite(PUMP_PIN,OFF);
+  pinMode(BVHR_PIN, INPUT);
+  pinMode(BVHC_PIN, INPUT);
+  pinMode(PUMP_PIN, OUTPUT);
+  digitalWrite(PUMP_PIN, OFF);
   sensors.begin();
 
-  // DONE: Implementeer wake-up sources
-  esp_sleep_enable_ext0_wakeup(GPIO_NUM_25, 1);
-  esp_sleep_enable_timer_wakeup(WAKEUP_TIMER);
+  // Configure wake-up sources for deep sleep
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_25, 1);           // External wakeup on button (GPIO 25)
+  esp_sleep_enable_timer_wakeup(WAKEUP_TIMER);            // Timer wakeup after WAKEUP_TIMER microseconds
 
-  //Print the wakeup reason for ESP32
+  // Print wakeup reason or go to sleep on first boot
   if (bootCount == 0) {
     bootCount++;
     Serial.print("First boot - ");
@@ -410,53 +381,51 @@ void setup() {
     print_wakeup_reason();
   }
 }
-//functions for http payload
 
-// this is used because otherwise the code will go in an infitnite loop
 bool runOnce = false;
 bool payloadSent = false;
 
 void loop() {
-  // We hebben huidige millis nodig om de verschillende processen te controleren (water geven / stoppen)
+  TRACE();  // mark loop start
   unsigned long huidigeMillis = millis();
-  //we place the code for the http payload before all the checks beause we only want to send the data once after the sensors are read
-  
-  // DONE: Controleer of de waterpomp uitgezet moet worden en roep functie zetWaterpompUit() aan indien nodig
+
+  // Check if pump should be turned off (duration elapsed)
   if (pumpState == ON && (huidigeMillis - startWateringTime >= wateringDuration)) {
-    zetWaterpompUit();    
+    TRACE();  // pump-off condition met
+    zetWaterpompUit();
   }
-  // DONE: Controleer of de waterpomp aangezet moet worden en roep functie zetWaterpompAan() aan indien nodig
+
+  // Check if panic button (override) was pressed to start pump
   if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0 && runOnce == false) {
+    TRACE();  // panic button branch
     runOnce = true;
     Serial.println("Panic button pressed");
     zetWaterpompAan(PUMP_TIMER_PANIC);
     Serial.println("Water geven met paniek duur");
   }
-  // DONE: Controleer of sensoren ingelezen moeten worden en roep functie leesSensorenEnGeefWaterIndienNodig() aan indien nodig
+
+  // Check if timer wake-up to read sensors and possibly water
   if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER && runOnce == false) {
+    TRACE();  // scheduled sensor-read branch
     runOnce = true;
     leesSensorenEnGeefWaterIndienNodig();
     lastReadTime = huidigeMillis;
   }
-  
+
+  // If WiFi is connected and pump is not running, send data (once)
   if (WiFi.status() == WL_CONNECTED && payloadSent == false && pumpState == OFF) {
-    // Create URL with parameters to call Google Apps Script
+    TRACE();  // entering data-send branch
     String urlFinal = httpPayload();
-    
     Serial.print("POST data to spreadsheet: ");
     Serial.println(urlFinal);
-
-    // Send HTTP request and get status code
     HTTPClient http;
     http.begin(urlFinal.c_str());
-    // http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     int httpCode = http.GET();
     Serial.print("HTTP Status Code: ");
     Serial.println(httpCode);
-
-    // Get response from HTTP request
+    // Get response (if any) and report result
     String payload;
-    if(httpCode == 200){
+    if (httpCode == 200) {
       Serial.println("Data sent successfully!");
       payload = http.getString();
       Serial.println("Payload: " + payload);
@@ -466,10 +435,12 @@ void loop() {
       payload = http.getString();
       Serial.println("Payload: " + payload);
     }
+    Serial.flush();
     http.end();
   }
-  if(pumpState == OFF && payloadSent == true){
-    //put esp to sleep
+
+  // If data is sent and pump is off, put ESP32 into deep sleep
+  if (pumpState == OFF && payloadSent == true) {
     gotoSleep();
   }
 }
