@@ -72,11 +72,12 @@ void print_wakeup_reason() {
       break;
   }
 }
-
+int temperatuur = 0;  // Temperature variable
 // Sensor reading functions
 int leesTemperatuur() {
   // Request temperature from the sensor and return it in °C
   sensors.requestTemperatures();
+  temperatuur = sensors.getTempCByIndex(0);
   return sensors.getTempCByIndex(0);
 }
 
@@ -255,13 +256,13 @@ void initWifiAndGps() {
       } else {
         Serial.println("INVALID");
       }
-      delay(500);
     }
     trys++;
     if (trys == 5) {
       Serial.println("GPS signal not found!");
       break;
     }
+    delay(500);
   }
 }
 
@@ -312,7 +313,10 @@ struct SensorData {
 SensorData compileSensorData() {
   SensorData data;
   data.date = getCurrentDateAndTime();
-  data.temp = leesTemperatuur();
+  if (temperatuur == 0){
+    temperatuur = leesTemperatuur();  // Read temperature if not already done
+  }
+  data.temp = temperatuur;  // Use the temperature read from the sensor
   data.bvh_cap = capBVH;
   data.bvh_res = resBVH;
   data.bvh_samen = berekenSamengesteldeCategorie(data.bvh_res, data.bvh_cap, data.temp);
@@ -386,12 +390,12 @@ bool runOnce = false;
 bool payloadSent = false;
 
 void loop() {
-  TRACE();  // mark loop start
   unsigned long huidigeMillis = millis();
 
   // Check if pump should be turned off (duration elapsed)
   if (pumpState == ON && (huidigeMillis - startWateringTime >= wateringDuration)) {
     TRACE();  // pump-off condition met
+    Serial.println("Water geven is afgelopen, pomp uit");
     zetWaterpompUit();
   }
 
