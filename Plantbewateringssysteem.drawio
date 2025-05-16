@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0" version="26.2.14">
   <diagram name="Page-1" id="crjWT-zu2yd3MlbxviBJ">
-    <mxGraphModel dx="1837" dy="1949" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="4038" dy="2573" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -225,20 +225,20 @@
         <mxCell id="qKud7y2XaxuHcWD2_8YC-80" value="VS CODE" style="rounded=1;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="240" y="-145" width="120" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="paPwTSUmMhCrT0wcbQci-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.083;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="z1A3XPoSgk_9IWkxE7o5-2" target="qKud7y2XaxuHcWD2_8YC-9">
+        <mxCell id="paPwTSUmMhCrT0wcbQci-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.083;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="z1A3XPoSgk_9IWkxE7o5-2" target="qKud7y2XaxuHcWD2_8YC-9" edge="1">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="280" y="240" />
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="paPwTSUmMhCrT0wcbQci-3" value="Rx Tx (HardwareSerial &amp;amp; TinyGPS++)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="paPwTSUmMhCrT0wcbQci-2">
+        <mxCell id="paPwTSUmMhCrT0wcbQci-3" value="Rx Tx (HardwareSerial &amp;amp; TinyGPS++)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="paPwTSUmMhCrT0wcbQci-2" vertex="1" connectable="0">
           <mxGeometry x="-0.7963" relative="1" as="geometry">
             <mxPoint y="-1" as="offset" />
           </mxGeometry>
         </mxCell>
         <mxCell id="z1A3XPoSgk_9IWkxE7o5-2" value="GPS" style="rounded=1;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-          <mxGeometry x="220" y="130" width="120" height="40" as="geometry" />
+          <mxGeometry x="160" y="161.5" width="120" height="40" as="geometry" />
         </mxCell>
         <mxCell id="qKud7y2XaxuHcWD2_8YC-19" value="Digitale PIN (OneWire &amp;amp; DallasTemperature)" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="qKud7y2XaxuHcWD2_8YC-10" target="qKud7y2XaxuHcWD2_8YC-9" edge="1">
           <mxGeometry x="0.1429" width="50" height="50" relative="1" as="geometry">
