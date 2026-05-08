@@ -6,4 +6,4 @@
 const char* WIFI_SSID = ""; // Replace with your WiFi SSID
 const char* WIFI_PASSWORD = ""; // Replace with your WiFi password
 
-const char* GOOGLE_SCRIPT_DEPLOYMENT_ID = "AKfycbxT_TdgfzD-woCF0XT1qDyVOs_0eKboZz1jb8WyDN3gyQuXQ5G0GLBFFEFkxR0cAi8H"; // Replace with your Google Apps Script deployment ID
+const char* GOOGLE_SCRIPT_DEPLOYMENT_ID = ""; // Replace with your Google Apps Script deployment ID
